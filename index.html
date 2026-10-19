@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="무 시세">
+<meta name="theme-color" content="#7a4c9f">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>무 시세 예측기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: 왼쪽 입력 패널 + 오른쪽 예측 결과(요약 → 그래프 → 패턴 → 시간대별 표), 좁은 화면은 한 줄로 쌓기 */
+:root{
+  --paper:#f3f5ef; --card:#ffffff; --ink:#23271f; --muted:#666d60; --line:#dce1d4;
+  --turnip:#7a4c9f; --turnip-soft:#eee6f5; --leaf:#3c7a37; --leaf-soft:#e2eedb;
+  --bad:#c0433a; --bad-soft:#f8e4e1; --p0:#4f7aa3; --p3:#b97c12; --band:#d9c9e8;
+  --f-display:"Jua","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#161915; --card:#1e221c; --ink:#e7ebe2; --muted:#9ba293; --line:#2e3429;
+  --turnip:#bf9be0; --turnip-soft:#2c2336; --leaf:#80c274; --leaf-soft:#1f2c1b;
+  --bad:#ff8174; --bad-soft:#3a1f1c; --p0:#86afd6; --p3:#e3ad4a; --band:#3d3150; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#161915; --card:#1e221c; --ink:#e7ebe2; --muted:#9ba293; --line:#2e3429;
+  --turnip:#bf9be0; --turnip-soft:#2c2336; --leaf:#80c274; --leaf-soft:#1f2c1b;
+  --bad:#ff8174; --bad-soft:#3a1f1c; --p0:#86afd6; --p3:#e3ad4a; --band:#3d3150; color-scheme:dark;}
+
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;}
+.wrap{max-width:1100px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px;}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:500;}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,5vw,42px);line-height:1.1;margin:2px 0 0;color:var(--turnip);text-wrap:balance;}
+h1 span{color:var(--leaf)}
+h2{font-family:var(--f-display);font-weight:400;font-size:20px;margin:0;}
+.sub{color:var(--muted);font-size:13px;max-width:52ch;margin:0}
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:22px;align-items:start;}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0;}
+.col{display:flex;flex-direction:column;gap:22px;min-width:0}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
+input[type=number],select{font:inherit;font-variant-numeric:tabular-nums;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:9px 10px;width:100%;box-sizing:border-box;}
+input[type=number]:focus-visible,select:focus-visible,button:focus-visible,input[type=checkbox]:focus-visible{outline:2px solid var(--turnip);outline-offset:2px;}
+.buyrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink)}
+.chk input{width:17px;height:17px;accent-color:var(--turnip)}
+table.inp{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.inp th{font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:0 4px 6px}
+table.inp td{padding:3px 4px}
+table.inp td.day{font-family:var(--f-display);font-size:17px;width:34px;color:var(--ink)}
+td.now input{border-color:var(--turnip);background:var(--turnip-soft)}
+.nowtag{font-size:10px;color:var(--turnip);font-weight:600;letter-spacing:.04em;display:block;margin-top:2px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;font-weight:500;border-radius:9px;padding:8px 12px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+button.pri{background:var(--turnip);border-color:var(--turnip);color:var(--card)}
+button.danger{background:var(--bad);border-color:var(--bad);color:var(--card)}
+.confirm{background:var(--bad-soft);border-radius:10px;padding:12px;font-size:13px;display:flex;flex-direction:column;gap:10px}
+.example{background:var(--turnip-soft);border-radius:10px;padding:10px 12px;font-size:13px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.note{font-size:12px;color:var(--muted);margin:0}
+.err{font-size:13px;color:var(--bad);margin:0}
+
+.hero{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.hero .k{font-size:12px;color:var(--muted);letter-spacing:.06em;font-weight:500}
+.hero .big{font-family:var(--f-display);font-size:clamp(30px,5vw,44px);line-height:1.1;color:var(--turnip)}
+.hero .meta{font-size:14px;color:var(--ink)}
+.hero .meta b{font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;border-top:1px dashed var(--line);padding-top:14px}
+@media (max-width:520px){.stats{grid-template-columns:minmax(0,1fr)}}
+.stat .v{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--muted)}
+.advice{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--leaf-soft);color:var(--ink);margin:0}
+.advice.warn{background:var(--bad-soft)}
+
+.chartwrap{width:100%;min-width:0}
+svg text{font-family:var(--f-body)}
+.ax{fill:var(--muted);font-size:11px}
+.axd{fill:var(--ink);font-size:12px;font-weight:500}
+.grid-l{stroke:var(--line);stroke-width:1}
+.bandp{fill:var(--band);opacity:.75}
+.expl{fill:none;stroke:var(--turnip);stroke-width:1.6;stroke-dasharray:5 4}
+.obsl{fill:none;stroke:var(--leaf);stroke-width:2.2}
+.obsd{fill:var(--leaf);stroke:var(--card);stroke-width:2}
+.buyl{stroke:var(--bad);stroke-width:1.2;stroke-dasharray:3 3}
+.buyt{fill:var(--bad);font-size:11px;font-weight:600}
+.peakc{fill:var(--turnip-soft)}
+.peakt{fill:var(--turnip);font-size:11px;font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+.pats{display:flex;flex-direction:column;gap:12px}
+.pat{display:grid;grid-template-columns:70px minmax(0,1fr) 48px;gap:10px;align-items:center}
+.pat .n{font-family:var(--f-display);font-size:17px}
+.pat .d{font-size:12px;color:var(--muted)}
+.bar{height:10px;border-radius:5px;background:var(--paper);overflow:hidden;margin-top:4px}
+.bar>span{display:block;height:100%;border-radius:5px}
+.pat .pc{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+
+.tblwrap{overflow-x:auto}
+table.res{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px;min-width:420px}
+table.res th{font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.res td{padding:7px 8px;border-bottom:1px solid var(--line)}
+table.res td.num{text-align:right}
+table.res tr.pk td{background:var(--turnip-soft)}
+.mini{display:inline-block;height:6px;border-radius:3px;background:var(--turnip);vertical-align:middle;margin-right:6px}
+.dim{color:var(--muted)}
+footer{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.bar>span{transition:width .35s ease}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">모여봐요 동물의 숲 · 무 주식</div>
+      <h1>무 시세 <span>예측기</span></h1>
+    </div>
+    <p class="sub">일요일 매입가와 매일 오전·오후 시세를 입력하면, 게임 내부 가격 생성 로직으로 이번 주 패턴과 최고가 시점을 계산합니다.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="시세 입력">
+      <div class="example" id="exampleBar" hidden>
+        <span>지금 보이는 값은 예시입니다.</span>
+        <button type="button" id="clearExample">내 데이터로 시작</button>
+      </div>
+      <div class="buyrow">
+        <label class="f">일요일 매입가 (벨)
+          <input type="number" id="buy" inputmode="numeric" min="90" max="110" placeholder="90–110">
+        </label>
+        <label class="f">지난주 패턴
+          <select id="prev">
+            <option value="-1">모름</option>
+            <option value="0">파동형</option>
+            <option value="1">3기형</option>
+            <option value="2">감소형</option>
+            <option value="3">4기형</option>
+          </select>
+        </label>
+      </div>
+      <label class="chk"><input type="checkbox" id="first"> 섬에서 처음 무를 산 주예요</label>
+      <p class="err" id="buyErr" hidden>무파니 매입가는 90~110벨 사이입니다. 매입가 없이 계산합니다.</p>
+      <table class="inp">
+        <thead><tr><th></th><th>오전</th><th>오후</th></tr></thead>
+        <tbody id="inpBody"></tbody>
+      </table>
+      <p class="note">모르는 칸은 비워두세요. 오전은 8시~12시, 오후는 12시~22시 가격입니다.</p>
+      <div class="btns">
+        <button type="button" id="newWeek">새 주 시작</button>
+      </div>
+      <div class="confirm" id="confirmBox" hidden>
+        <span id="confirmText">이번 주 입력값을 모두 지웁니다.</span>
+        <div class="btns">
+          <button type="button" class="danger" id="confirmYes">지우기</button>
+          <button type="button" id="confirmNo">취소</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="col">
+      <section class="hero" aria-live="polite">
+        <div class="k">최고가 예상 시점</div>
+        <div class="big" id="peakWhen">—</div>
+        <div class="meta" id="peakMeta"></div>
+        <p class="advice" id="advice" hidden></p>
+        <div class="stats">
+          <div class="stat"><div class="v" id="sGuar">—</div><div class="l">최소 보장가 (남은 기간)</div></div>
+          <div class="stat"><div class="v" id="sMax">—</div><div class="l">최대 가능가 (남은 기간)</div></div>
+          <div class="stat"><div class="v" id="sPat">—</div><div class="l">가장 유력한 패턴</div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>이번 주 시세 예측 그래프</h2>
+        <div class="chartwrap" id="chart"></div>
+        <div class="legend">
+          <span><i style="background:var(--band)"></i>가능한 가격 범위</span>
+          <span><i style="background:var(--turnip);height:2px"></i>평균 예상가</span>
+          <span><i style="background:var(--leaf)"></i>입력한 시세</span>
+          <span><i style="background:var(--bad);height:2px"></i>매입가</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>패턴 확률</h2>
+        <div class="pats" id="pats"></div>
+      </section>
+
+      <section class="panel">
+        <h2>시간대별 예상가</h2>
+        <div class="tblwrap">
+          <table class="res">
+            <thead><tr><th>시간</th><th style="text-align:right">입력</th><th style="text-align:right">예상 범위</th><th style="text-align:right">평균</th><th>최고점 확률</th></tr></thead>
+            <tbody id="resBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+  <footer>계산 방식: 데이터마이닝으로 공개된 무 가격 생성 알고리즘(파동형·3기형·감소형·4기형)의 모든 경우의 수를 대입해 입력값과 맞지 않는 경우를 제거하고, 남은 경우를 확률로 가중합니다. 입력값은 이 브라우저에만 저장됩니다.</footer>
+</div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const DAYS=['월','화','수','목','금','토'];
+const PN=['파동형','3기형','감소형','4기형'];
+const PD=['오르내림 반복 · 최고 약 1.4배','큰 급등 · 최고 2~6배','계속 하락 · 손해','작은 급등 · 최고 1.4~2배'];
+const PC=['var(--p0)','var(--turnip)','var(--bad)','var(--p3)'];
+const TRANS=[[.20,.30,.15,.35],[.50,.05,.20,.25],[.25,.45,.05,.25],[.45,.25,.15,.15]];
+let STAT=[.25,.25,.25,.25];
+for(let k=0;k<60;k++){const n=[0,0,0,0];for(let i=0;i<4;i++)for(let j=0;j<4;j++)n[j]+=STAT[i]*TRANS[i][j];STAT=n;}
+const slotName=i=>DAYS[i>>1]+'요일 '+(i%2?'오후':'오전');
+const ceilf=x=>Math.ceil(x-1e-6);
+
+/* ---------- 시나리오 템플릿 ---------- */
+const I=(n,lo,hi)=>({t:'I',n,lo,hi});
+const D=(n,lo,hi,dmin,dmax)=>({t:'D',n,lo,hi,dmin,dmax});
+const S={t:'S',n:3};
+const TPL=[];
+for(let d1=2;d1<=3;d1++)for(let h1=0;h1<=6;h1++){const h23=7-h1;for(let h3=0;h3<h23;h3++)
+  TPL.push({p:0,prob:.5/7/h23,seg:[I(h1,.9,1.4),D(d1,.6,.8,.04,.10),I(h23-h3,.9,1.4),D(5-d1,.6,.8,.04,.10),I(h3,.9,1.4)]});}
+for(let ps=3;ps<=9;ps++){const dl=ps-2;
+  TPL.push({p:1,prob:1/7,seg:[D(dl,.85,.9,.03,.05),I(1,.9,1.4),I(1,1.4,2.0),I(1,2.0,6.0),I(1,1.4,2.0),I(1,.9,1.4),I(12-dl-5,.4,.9)]});}
+TPL.push({p:2,prob:1,seg:[D(12,.85,.9,.03,.05)]});
+for(let ps=2;ps<=9;ps++){const dl=ps-2;
+  TPL.push({p:3,prob:1/8,seg:[D(dl,.4,.9,.03,.05),I(2,.9,1.4),S,D(7-dl,.4,.9,.03,.05)]});}
+
+function evalScen(t,b,obs){
+  let like=1,i=0;const mn=[],mx=[],ex=[];
+  for(const s of t.seg){
+    if(s.t==='I'){
+      for(let k=0;k<s.n;k++,i++){const p=obs[i];
+        if(p){const ov=Math.min(s.hi,p/b)-Math.max(s.lo,(p-1)/b);if(ov<=-1e-9)return null;
+          like*=Math.max(ov,1e-6)/(s.hi-s.lo);mn[i]=mx[i]=ex[i]=p;}
+        else{mn[i]=ceilf(s.lo*b);mx[i]=ceilf(s.hi*b);ex[i]=ceilf((s.lo+s.hi)/2*b);}}
+    }else if(s.t==='D'){
+      let rl=s.lo,rh=s.hi;
+      for(let k=0;k<s.n;k++,i++){const p=obs[i];
+        if(p){const nl=Math.max(rl,(p-1)/b),nh=Math.min(rh,p/b);if(nh<nl-1e-9)return null;
+          like*=Math.max(nh-nl,1e-6)/(rh-rl);rl=nl;rh=Math.max(nh,nl);mn[i]=mx[i]=ex[i]=p;}
+        else{mn[i]=ceilf(rl*b);mx[i]=ceilf(rh*b);ex[i]=ceilf((rl+rh)/2*b);}
+        rl-=s.dmax;rh-=s.dmin;}
+    }else{
+      const i0=i;let Rl=1.4,Rh=2.0;const pm=obs[i0+1];
+      if(pm){const nl=Math.max(Rl,(pm-1)/b),nh=Math.min(Rh,pm/b);if(nh<nl-1e-9)return null;
+        like*=Math.max(nh-nl,1e-6)/(Rh-Rl);Rl=nl;Rh=Math.max(nh,nl);}
+      for(const sd of [i0,i0+2]){const p=obs[sd];
+        if(p){const lo=Math.max(1.4,p/b),hi=Math.min(Rh,(p+1)/b);if(hi<lo-1e-9)return null;
+          like*=Math.max(hi-lo,1e-6)/Math.max(Rh-1.4,1e-6);
+          if(!pm){Rl=Math.max(Rl,p/b);if(Rl>Rh+1e-9)return null;}
+          mn[sd]=mx[sd]=ex[sd]=p;}}
+      if(pm){mn[i0+1]=mx[i0+1]=ex[i0+1]=pm;}
+      else{mn[i0+1]=ceilf(Rl*b);mx[i0+1]=ceilf(Rh*b);ex[i0+1]=ceilf((Rl+Rh)/2*b);}
+      for(const sd of [i0,i0+2]) if(!obs[sd]){mn[sd]=ceilf(1.4*b)-1;mx[sd]=ceilf(Rh*b)-1;ex[sd]=ceilf((1.4+(Rl+Rh)/2)/2*b)-1;}
+      i+=3;
+    }
+  }
+  return {like,mn,mx,ex};
+}
+
+function predict(buy,prev,first,obs){
+  const prior=first?[0,0,0,1]:(prev>=0?TRANS[prev]:STAT);
+  const bases=(buy>=90&&buy<=110)?[buy]:Array.from({length:21},(_,k)=>90+k);
+  const res=[];
+  for(const t of TPL){if(!prior[t.p])continue;
+    for(const b of bases){const r=evalScen(t,b,obs);if(!r)continue;
+      r.w=prior[t.p]*t.prob*r.like/bases.length;r.p=t.p;if(r.w>0)res.push(r);}}
+  const tot=res.reduce((a,r)=>a+r.w,0);
+  if(!res.length||!(tot>0))return {none:true};
+  let last=-1;for(let i=0;i<12;i++)if(obs[i])last=i;
+  const fut=[];for(let i=last+1;i<12;i++)fut.push(i);
+  const R={pat:[0,0,0,0],min:Array(12).fill(Infinity),max:Array(12).fill(-Infinity),exp:Array(12).fill(0),
+    peak:Array(12).fill(0),pmin:Array(12).fill(Infinity),pmax:Array(12).fill(-Infinity),fut,last,guar:Infinity,pot:-Infinity};
+  for(const r of res){const w=r.w/tot;R.pat[r.p]+=w;
+    for(let i=0;i<12;i++){R.min[i]=Math.min(R.min[i],r.mn[i]);R.max[i]=Math.max(R.max[i],r.mx[i]);R.exp[i]+=w*r.ex[i];}
+    if(fut.length){let best=-1;for(const i of fut)best=Math.max(best,r.ex[i]);
+      const top=fut.filter(i=>r.ex[i]===best);
+      for(const i of top){R.peak[i]+=w/top.length;R.pmin[i]=Math.min(R.pmin[i],r.mn[i]);R.pmax[i]=Math.max(R.pmax[i],r.mx[i]);}
+      R.guar=Math.min(R.guar,Math.max(...fut.map(i=>r.mn[i])));
+      R.pot=Math.max(R.pot,Math.max(...fut.map(i=>r.mx[i])));}
+  }
+  return R;
+}
+
+/* ---------- 상태 ---------- */
+const KEY='turnip-week-v1';
+const EXAMPLE={buy:98,prev:-1,first:false,obs:[86,83,79,122,0,0,0,0,0,0,0,0],example:true};
+let st;
+try{st=JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){st=null;}
+if(!st||!Array.isArray(st.obs)||st.obs.length!==12)st=JSON.parse(JSON.stringify(EXAMPLE));
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st));}catch(e){}};
+
+/* 현재 시간대 */
+const now=new Date();const dow=now.getDay();
+const nowSlot=(dow>=1&&dow<=6)?(dow-1)*2+(now.getHours()>=12?1:0):-1;
+
+const body=$('inpBody');
+body.innerHTML=DAYS.map((d,r)=>'<tr><td class="day">'+d+'</td>'+[0,1].map(c=>{const i=r*2+c;
+  return '<td'+(i===nowSlot?' class="now"':'')+'><input type="number" inputmode="numeric" min="1" max="999" id="s'+i+'" aria-label="'+slotName(i)+' 시세">'+(i===nowSlot?'<span class="nowtag">지금</span>':'')+'</td>';}).join('')+'</tr>').join('');
+
+function toForm(){
+  $('buy').value=st.buy||'';$('prev').value=String(st.prev);$('first').checked=!!st.first;
+  for(let i=0;i<12;i++)$('s'+i).value=st.obs[i]||'';
+  $('exampleBar').hidden=!st.example;
+}
+function fromForm(){
+  const v=x=>{const n=parseInt(x,10);return n>0?n:0;};
+  st.buy=v($('buy').value);st.prev=parseInt($('prev').value,10);st.first=$('first').checked;
+  st.obs=Array.from({length:12},(_,i)=>v($('s'+i).value));
+}
+
+let lastR=null;
+function render(){
+  const buyOk=st.buy>=90&&st.buy<=110;
+  $('buyErr').hidden=!(st.buy&&!buyOk);
+  $('prev').disabled=st.first;
+  const R=predict(st.buy,st.prev,st.first,st.obs);lastR=R;
+  const adv=$('advice');adv.hidden=true;adv.className='advice';
+  if(R.none){
+    $('peakWhen').textContent='맞는 패턴 없음';
+    $('peakMeta').textContent='입력한 값과 일치하는 경우가 없습니다. 매입가, 지난주 패턴, 오전·오후 칸이 바뀌지 않았는지 확인하세요.';
+    ['sGuar','sMax','sPat'].forEach(id=>$(id).textContent='—');
+    $('pats').innerHTML='';$('resBody').innerHTML='';drawChart(null);return;
+  }
+  const top=R.pat.indexOf(Math.max(...R.pat));
+  $('sPat').textContent=PN[top]+' '+Math.round(R.pat[top]*100)+'%';
+  if(!R.fut.length){
+    $('peakWhen').textContent='이번 주 입력 완료';$('peakMeta').textContent='일요일에 새 주를 시작하세요.';
+    $('sGuar').textContent='—';$('sMax').textContent='—';
+  }else{
+    let bi=R.fut[0];for(const i of R.fut)if(R.peak[i]>R.peak[bi])bi=i;
+    $('peakWhen').textContent=slotName(bi);
+    $('peakMeta').innerHTML='확률 <b>'+Math.round(R.peak[bi]*100)+'%</b> · 이 시점이 최고점일 때 예상가 <b>'+R.pmin[bi]+'–'+R.pmax[bi]+'벨</b>';
+    $('sGuar').textContent=R.guar+'벨';$('sMax').textContent=R.pot+'벨';
+    const lastP=R.last>=0?st.obs[R.last]:0;
+    if(lastP&&lastP>=R.pot){adv.textContent='남은 기간에 지금('+lastP+'벨)보다 비싸질 가능성이 없습니다. 지금 파는 게 최선입니다.';adv.hidden=false;}
+    else if(R.pat[2]>=.6){adv.className='advice warn';adv.textContent='감소형 가능성이 '+Math.round(R.pat[2]*100)+'%입니다. 이번 주는 매입가 이상으로 오르지 않으니 친구 섬 시세를 알아보는 게 좋습니다.';adv.hidden=false;}
+    else if(lastP&&lastP>=R.guar&&buyOk&&lastP>st.buy){adv.textContent='지금 가격('+lastP+'벨)이 남은 기간 최소 보장가 이상입니다. 안정적으로 이익을 원하면 지금 팔아도 됩니다.';adv.hidden=false;}
+  }
+  $('pats').innerHTML=R.pat.map((p,k)=>'<div class="pat"><div class="n" style="color:'+PC[k]+'">'+PN[k]+'</div><div><div class="d">'+PD[k]+'</div><div class="bar"><span style="width:'+(p*100).toFixed(1)+'%;background:'+PC[k]+'"></span></div></div><div class="pc">'+Math.round(p*100)+'%</div></div>').join('');
+  const pkMax=Math.max(...R.peak,0.0001);
+  $('resBody').innerHTML=Array.from({length:12},(_,i)=>{const o=st.obs[i];const isF=R.fut.includes(i);
+    const pk=R.peak[i];
+    return '<tr'+(isF&&pk===Math.max(...R.fut.map(j=>R.peak[j]))&&pk>0?' class="pk"':'')+'><td>'+slotName(i)+'</td><td class="num">'+(o||'<span class="dim">–</span>')+'</td><td class="num">'+(o?'<span class="dim">입력됨</span>':R.min[i]+'–'+R.max[i])+'</td><td class="num">'+(o?'':Math.round(R.exp[i]))+'</td><td>'+(isF?'<span class="mini" style="width:'+Math.round(pk/pkMax*60)+'px"></span>'+Math.round(pk*100)+'%':'<span class="dim">–</span>')+'</td></tr>';}).join('');
+  drawChart(R);
+}
+
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x)));for(const m of [1,2,2.5,5,10])if(m*p>=x)return m*p;return 10*p;}
+function drawChart(R){
+  const wrap=$('chart');const W=Math.max(300,wrap.clientWidth||640),H=W<520?250:300;
+  const pl=42,pr=10,pt=18,pb=44,pw=W-pl-pr,ph=H-pt-pb;
+  const obs=st.obs,buy=(st.buy>=90&&st.buy<=110)?st.buy:0;
+  let top=Math.max(buy,...obs,100);if(R&&!R.none)top=Math.max(top,...R.max);
+  const step=niceStep(top*1.05/4),yMax=Math.ceil(top*1.05/step)*step;
+  const x=i=>pl+(i+.5)*pw/12,y=v=>pt+ph-(v/yMax)*ph;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="이번 주 무 시세 예측 그래프">';
+  if(R&&!R.none&&R.fut.length){let bi=R.fut[0];for(const i of R.fut)if(R.peak[i]>R.peak[bi])bi=i;
+    const cw=pw/12;s+='<rect class="peakc" x="'+(x(bi)-cw/2)+'" y="'+pt+'" width="'+cw+'" height="'+ph+'" rx="4"/>';
+    s+='<text class="peakt" x="'+x(bi)+'" y="'+(pt-5)+'" text-anchor="middle">최고점</text>';}
+  for(let v=0;v<=yMax;v+=step){s+='<line class="grid-l" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(v)+'" y2="'+y(v)+'"/><text class="ax" x="'+(pl-6)+'" y="'+(y(v)+4)+'" text-anchor="end">'+v+'</text>';}
+  if(R&&!R.none){
+    const up=R.max.map((v,i)=>x(i)+','+y(v)),dn=R.min.map((v,i)=>x(i)+','+y(v)).reverse();
+    s+='<polygon class="bandp" points="'+up.concat(dn).join(' ')+'"/>';
+    const fromI=Math.max(0,R.last);
+    const ep=[];for(let i=fromI;i<12;i++)ep.push(x(i)+','+y(i===R.last?obs[i]:R.exp[i]));
+    if(ep.length>1)s+='<polyline class="expl" points="'+ep.join(' ')+'"/>';
+  }
+  if(buy)s+='<line class="buyl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y(buy)+'" y2="'+y(buy)+'"/><text class="buyt" x="'+(W-pr-2)+'" y="'+(y(buy)-5)+'" text-anchor="end">매입 '+buy+'</text>';
+  let seg=[];const flush=()=>{if(seg.length>1)s+='<polyline class="obsl" points="'+seg.join(' ')+'"/>';seg=[];};
+  for(let i=0;i<12;i++){if(obs[i])seg.push(x(i)+','+y(obs[i]));else flush();}flush();
+  for(let i=0;i<12;i++)if(obs[i])s+='<circle class="obsd" cx="'+x(i)+'" cy="'+y(obs[i])+'" r="4.5"/>';
+  for(let i=0;i<12;i++)s+='<text class="ax" x="'+x(i)+'" y="'+(H-pb+16)+'" text-anchor="middle">'+(i%2?'오후':'오전')+'</text>';
+  for(let d=0;d<6;d++)s+='<text class="axd" x="'+((x(d*2)+x(d*2+1))/2)+'" y="'+(H-pb+34)+'" text-anchor="middle">'+DAYS[d]+'</text>';
+  s+='</svg>';wrap.innerHTML=s;
+}
+
+/* ---------- 이벤트 ---------- */
+document.querySelector('.panel').addEventListener('input',e=>{
+  if(e.target.matches('input,select')){fromForm();st.example=false;$('exampleBar').hidden=true;save();render();}
+});
+$('clearExample').addEventListener('click',()=>{st={buy:0,prev:-1,first:false,obs:Array(12).fill(0),example:false};save();toForm();render();$('buy').focus();});
+let carry=-1;
+$('newWeek').addEventListener('click',()=>{
+  carry=-1;
+  if(lastR&&!lastR.none){const m=Math.max(...lastR.pat);if(m>=.95)carry=lastR.pat.indexOf(m);}
+  $('confirmText').textContent='이번 주 입력값을 모두 지웁니다.'+(carry>=0?' 지난주 패턴은 "'+PN[carry]+'"(으)로 설정됩니다.':' 지난주 패턴은 직접 골라주세요.');
+  $('confirmBox').hidden=false;
+});
+$('confirmNo').addEventListener('click',()=>{$('confirmBox').hidden=true;});
+$('confirmYes').addEventListener('click',()=>{
+  st={buy:0,prev:carry,first:false,obs:Array(12).fill(0),example:false};save();toForm();render();$('confirmBox').hidden=true;$('buy').focus();
+});
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>drawChart(lastR),120);});
+
+toForm();render();
+})();
+</script>
+
+</body>
+</html>
